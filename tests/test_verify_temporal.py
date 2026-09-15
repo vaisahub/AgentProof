@@ -158,3 +158,37 @@ def test_product_state_count():
     result = check_temporal_property(graph, rule)
     assert result["violated"] is False
     assert result["product_states_explored"] <= 3 * 2
+
+
+def test_multi_tool_node_non_first_tool_is_caught():
+    """A forbidden-tool rule must flag a node even when the tool is not tools[0].
+
+    Previously only tools[0] was mapped to the event, so rm_rf at index 1
+    was silently skipped and the static check produced a false negative.
+    """
+    graph = AgentGraph(
+        name="g",
+        framework="manual",
+        nodes=(
+            GraphNode("entry", NodeKind.ENTRY),
+            GraphNode("agent", NodeKind.TOOL, tools=("fetch", "rm_rf")),
+            GraphNode("exit", NodeKind.EXIT),
+        ),
+        edges=(
+            GraphEdge("entry", "agent"),
+            GraphEdge("agent", "exit"),
+        ),
+        entry_id="entry",
+        exit_ids=("exit",),
+    )
+
+    rule = compile_monitor_rule(
+        MonitorRuleSpec(rule_id="no_rm_rf", dsl="G !tool:rm_rf", on_violation="block")
+    )
+
+    result = check_temporal_property(graph, rule)
+    assert result["violated"] is True, (
+        "rm_rf is available on the agent node but was not flagged — "
+        "multi-tool event mapping is broken"
+    )
+    assert "agent" in result["violation_path"]

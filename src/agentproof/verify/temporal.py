@@ -26,6 +26,7 @@ def _default_event_mapper(node_id: str, graph: AgentGraph) -> dict[str, Any]:
     event: dict[str, Any] = {"node_id": node.id, "action_type": node.kind.value}
     if node.kind == NodeKind.TOOL and node.tools:
         event["tool_name"] = node.tools[0]
+        event["tool_names"] = list(node.tools)
         event["tags"] = ["tool"]
     elif node.kind == NodeKind.LLM:
         event["tags"] = ["llm_step"]

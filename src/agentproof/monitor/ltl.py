@@ -615,7 +615,13 @@ def _event_symbol(predicates: tuple[str, ...], event: Mapping[str, Any]) -> int:
 
 def _event_matches_predicate(predicate: str, event: Mapping[str, Any]) -> bool:
     if predicate.startswith("tool:"):
-        return str(event.get("tool_name", "")) == predicate[5:]
+        tool = predicate[5:]
+        # tool_names carries the full list for multi-tool nodes; fall back to
+        # the legacy single-value tool_name for manually constructed events.
+        tool_names = event.get("tool_names")
+        if tool_names is not None:
+            return tool in {str(t) for t in tool_names}
+        return str(event.get("tool_name", "")) == tool
     if predicate.startswith("action:"):
         return str(event.get("action_type", "")) == predicate[7:]
     if predicate.startswith("decision:"):

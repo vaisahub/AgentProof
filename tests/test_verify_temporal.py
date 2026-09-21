@@ -192,3 +192,48 @@ def test_multi_tool_node_non_first_tool_is_caught():
         "multi-tool event mapping is broken"
     )
     assert "agent" in result["violation_path"]
+
+
+def test_multi_tool_node_liveness_not_self_discharged():
+    """A response rule must not self-discharge on a node that declares both tools.
+
+    For a node with tools=("write", "audit_log"), the rule
+    ``tool:write -> F tool:audit_log`` means: every write must eventually
+    be followed by an audit_log step.  If the agent calls only write and
+    then exits, that is a violation.
+
+    The OR-based approach (emitting a single event with all tools true) let
+    the antecedent fire AND the consequent simultaneously satisfy itself,
+    producing a false 'verified' verdict.  The branching fix generates one
+    DFA symbol per tool, so the write-only branch remains pending at exit.
+    """
+    graph = AgentGraph(
+        name="g",
+        framework="manual",
+        nodes=(
+            GraphNode("entry", NodeKind.ENTRY),
+            GraphNode("agent", NodeKind.TOOL, tools=("write", "audit_log")),
+            GraphNode("exit", NodeKind.EXIT),
+        ),
+        edges=(
+            GraphEdge("entry", "agent"),
+            GraphEdge("agent", "exit"),
+        ),
+        entry_id="entry",
+        exit_ids=("exit",),
+    )
+
+    rule = compile_monitor_rule(
+        MonitorRuleSpec(
+            rule_id="audit_after_write",
+            dsl="tool:write -> F tool:audit_log",
+            on_violation="block",
+        )
+    )
+
+    result = check_temporal_property(graph, rule)
+    assert result["violated"] is True, (
+        "A node with tools=(write, audit_log) and no separate audit step "
+        "should violate tool:write -> F tool:audit_log, but the check "
+        "reported 'verified' — liveness self-discharge is not fixed"
+    )

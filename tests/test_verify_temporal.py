@@ -237,3 +237,29 @@ def test_multi_tool_node_liveness_not_self_discharged():
         "should violate tool:write -> F tool:audit_log, but the check "
         "reported 'verified' — liveness self-discharge is not fixed"
     )
+
+
+def test_multi_tool_node_preserves_custom_event_mapper_fields():
+    """Per-tool branching must preserve fields supplied by a custom mapper."""
+    graph = AgentGraph(
+        name="g",
+        framework="manual",
+        nodes=(GraphNode("agent", NodeKind.TOOL, tools=("A", "B")),),
+        edges=(),
+        entry_id="agent",
+        exit_ids=("agent",),
+    )
+
+    rule = compile_monitor_rule(
+        MonitorRuleSpec(
+            rule_id="no_dangerous_action",
+            dsl="G !action:dangerous",
+            on_violation="block",
+        )
+    )
+
+    def custom_event_mapper(node_id, _graph):
+        return {"node_id": node_id, "action_type": "dangerous"}
+
+    result = check_temporal_property(graph, rule, event_mapper=custom_event_mapper)
+    assert result["violated"] is True

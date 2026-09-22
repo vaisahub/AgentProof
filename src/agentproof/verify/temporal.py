@@ -19,8 +19,8 @@ def _default_event_mapper(node_id: str, graph: AgentGraph) -> dict[str, Any]:
     """Generate a synthetic event dict for a graph node.
 
     For single-tool (or non-TOOL) nodes this returns one event; multi-tool
-    nodes are handled by :func:`_node_dfa_symbols`, which calls this mapper
-    once per tool so each event carries exactly one live tool name.
+    nodes are handled by :func:`_node_dfa_symbols`, which clones the mapped
+    event once per tool so each event carries exactly one live tool name.
     """
     node = node_by_id(graph, node_id)
     if node is None:
@@ -55,19 +55,16 @@ def _node_dfa_symbols(
       happens to also declare ``audit_log``.
     For single-tool and non-TOOL nodes, exactly one symbol is returned.
     """
+    base_event = event_mapper(node_id, graph)
     node = node_by_id(graph, node_id)
     if node is not None and node.kind == NodeKind.TOOL and len(node.tools) > 1:
         symbols: set[int] = set()
         for tool in node.tools:
-            event: dict[str, Any] = {
-                "node_id": node_id,
-                "action_type": node.kind.value,
-                "tool_name": tool,
-                "tags": ["tool"],
-            }
+            event = dict(base_event)
+            event["tool_name"] = tool
             symbols.add(_event_symbol(predicates, event))
         return frozenset(symbols)
-    return frozenset({_event_symbol(predicates, event_mapper(node_id, graph))})
+    return frozenset({_event_symbol(predicates, base_event)})
 
 
 def check_temporal_property(
